@@ -1,0 +1,14 @@
+# VS Code Settings
+.vscode/
+
+#bulid
+*.o
+*.o.cmd
+*.mod
+*.mod.cmd
+*.ko
+*.ko.cmd
+*.mod.c
+*.cmd
+*symvers
+*order
