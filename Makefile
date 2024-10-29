@@ -2426,7 +2426,7 @@ EXTRA_CFLAGS += -DCONFIG_CONCURRENT_MODE
 ARCH ?= arm
 CROSS_COMPILE ?= arm-rockchip830-linux-uclibcgnueabihf-
 KSRC ?= $(LUCKFOX_SDK_PATH)/sysdrv/source/kernel
-MODULE_NAME := 8812cu
+MODULE_NAME := 8812eu
 endif
 
 ########### CUSTOMER ################################
