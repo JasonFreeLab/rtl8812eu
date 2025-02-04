@@ -542,13 +542,15 @@ void bf_monitor_print_cbr(PADAPTER adapter, struct seq_file *m)
     RTW_PRINT_SEL(m, "Codebook Information: %hhu\n", csi->codebook);
     RTW_PRINT_SEL(m, "Sounding Dialog Token: %hhu\n", csi->token);
     for (i=0; i<(csi->nc+1); i++) {
-        tmp_snr = (csi->snr[i]*25) + 2200;  // tmp_snr: 0.01dB unit
-        RTW_PRINT_SEL(m, "Average Signal to Noise Ratio - Stream %hhu: %d mBm\n", i, tmp_snr);
+        // tmp_snr: 0.01dB unit
+        tmp_snr = (csi->snr[i]*25) +2200;
+        RTW_PRINT_SEL(m, "Average Signal to Noise Ratio (NDP's, seen from remote) - Stream %hhu: %d mBm\n", i, tmp_snr);
     }
     for (i=0; i<(csi->nc+1); i++) {
         RTW_PRINT_SEL(m, "CBR Frame RSSI %hhu: %d dBm, SNR %hhu: %d dB, EVM %hhu: -%d dB\n", i, csi->rx_pwr[i], i, csi->rx_snr[i], i, csi->rx_evm[i]);
     }
     RTW_PRINT_SEL(m, "CSI Matrix Len: %hu\n", csi->csi_matrix_len);
+    /*
     RTW_PRINT_SEL(m, "CSI Matrix: \n");
     for (i=0; i<(csi->csi_matrix_len/16)+1; i++) {
         for (j=0; j<16; j++) {
@@ -559,6 +561,7 @@ void bf_monitor_print_cbr(PADAPTER adapter, struct seq_file *m)
         RTW_PRINT_SEL(m, "\n");
     }
     RTW_PRINT_SEL(m, "\n");
+    */
 }
 
 void bf_monitor_print_conf(PADAPTER adapter, struct seq_file *m)
@@ -625,6 +628,7 @@ u32 bf_monitor_get_report_packet(PADAPTER adapter, union recv_frame *precv_frame
 	u32 i, j;
 	struct csi_rpt_monitor * csi;
 	HAL_DATA_TYPE	*pHalData;
+	struct rtw_ieee80211_hdr_3addr * ieeehdr;
 	
 	pframe = precv_frame->u.hdr.rx_data;
 	frame_len = precv_frame->u.hdr.len;
@@ -633,31 +637,42 @@ u32 bf_monitor_get_report_packet(PADAPTER adapter, union recv_frame *precv_frame
 	action = frame_body[1];
 	pHalData= GET_HAL_DATA(adapter);
 	csi = &(pHalData->csi_rpt_monitor);
+	ieeehdr = (struct rtw_ieee80211_hdr_3addr *) precv_frame->u.hdr.rx_data;
 
-	if ((category == RTW_WLAN_CATEGORY_VHT) && (action == RTW_WLAN_ACTION_VHT_COMPRESSED_BEAMFORMING)) {
-		pMIMOCtrlField = pframe + 26;
-		csi->nc = (*pMIMOCtrlField) & 0x7;
-		csi->nr = ((*pMIMOCtrlField) & 0x38) >> 3;
-		csi->bw =  (((*pMIMOCtrlField) & 0xC0) >> 6);
-		csi->ng = (*(pMIMOCtrlField+1)) & 0x3;
-		csi->codebook = ((*(pMIMOCtrlField+1)) & 0x4) >> 2;
-                csi->token =  ((*(pMIMOCtrlField+2)) & 0xfc) >> 2;
-                for (i=0; i<Nc+1; i++) {
-                    csi->snr[i] = (*(pMIMOCtrlField+3+i));
-                    csi->rx_snr[i] = precv_frame->u.hdr.attrib.phy_info.rx_snr[i];
-                    csi->rx_pwr[i] = precv_frame->u.hdr.attrib.phy_info.rx_pwr[i];
-                    csi->rx_evm[i] = precv_frame->u.hdr.attrib.phy_info.rx_mimo_evm_dbm[i];
-                }
-		/*
-		 * 24+(1+1+3)+2
-		 * ==> MAC header+(Category+ActionCode+MIMOControlField)+SNR(Nc=2)
-		 */
-		pCSIMatrix = pMIMOCtrlField + 3 + (Nc+1);
-		CSIMatrixLen = frame_len - 26 - 3 - (Nc+1) - 4; // 4=crc
-		csi->csi_matrix_len = CSIMatrixLen;
-		_rtw_memcpy(csi->csi_matrix, pCSIMatrix, CSIMatrixLen);
-		RTW_INFO("BF_MONITOR %s: local is BFer, got compressed beamforming frame from BFee, pkt type=RTW_WLAN_ACTION_VHT_COMPRESSED_BEAMFORMING, Nc=%d, Nr=%d, CH_W=%d, Ng=%d, CodeBook=%d, CSIMatrixLen=%d\n", __FUNCTION__, csi->nc, csi->nr, csi->bw, csi->ng, csi->codebook, csi->csi_matrix_len);
+	if (!((category == RTW_WLAN_CATEGORY_VHT) && (action == RTW_WLAN_ACTION_VHT_COMPRESSED_BEAMFORMING))) {
+	        return ret;
 	} 
+
+	// CHECK THE CBR FRAME'S DEST ADDR!
+	if (_rtw_memcmp(adapter_mac_addr(adapter), ieeehdr->addr1, ETH_ALEN) == _FALSE) {
+	        return ret;
+	}
+
+	pMIMOCtrlField = pframe + 26;
+	csi->nc = (*pMIMOCtrlField) & 0x7;
+	csi->nr = ((*pMIMOCtrlField) & 0x38) >> 3;
+	csi->bw =  (((*pMIMOCtrlField) & 0xC0) >> 6);
+	csi->ng = (*(pMIMOCtrlField+1)) & 0x3;
+	csi->codebook = ((*(pMIMOCtrlField+1)) & 0x4) >> 2;
+        csi->token =  ((*(pMIMOCtrlField+2)) & 0xfc) >> 2;
+        for (i=0; i<Nc+1; i++) {
+            csi->snr[i] = (*(pMIMOCtrlField+3+i));
+            csi->rx_snr[i] = precv_frame->u.hdr.attrib.phy_info.rx_snr[i];
+            csi->rx_pwr[i] = precv_frame->u.hdr.attrib.phy_info.rx_pwr[i];
+            csi->rx_evm[i] = precv_frame->u.hdr.attrib.phy_info.rx_mimo_evm_dbm[i];
+        }
+	/*
+	 * 24+(1+1+3)+2
+	 * ==> MAC header+(Category+ActionCode+MIMOControlField)+SNR(Nc=2)
+	 */
+	CSIMatrixLen = frame_len - 26 - 3 - (Nc+1) - 4; // 4=crc
+	csi->csi_matrix_len = CSIMatrixLen;
+
+	RTW_INFO("BF_MONITOR %s: local is BFer (%02x:%02x:%02x:%02x:%02x:%02x), got compressed beamforming report from BFee (%02x:%02x:%02x:%02x:%02x:%02x), Nc=%d, Nr=%d, CH_W=%d, Ng=%d, CodeBook=%d\n",
+	        __FUNCTION__,
+	        ieeehdr->addr1[0], ieeehdr->addr1[1], ieeehdr->addr1[2], ieeehdr->addr1[3], ieeehdr->addr1[4], ieeehdr->addr1[5],
+	        ieeehdr->addr2[0], ieeehdr->addr2[1], ieeehdr->addr2[2], ieeehdr->addr2[3], ieeehdr->addr2[4], ieeehdr->addr2[5],
+	        csi->nc, csi->nr, csi->bw, csi->ng, csi->codebook);
 	return ret;
 }
 
@@ -666,10 +681,8 @@ void bf_monitor_c2h_snd_txbf(PADAPTER adapter, u8 *buf, u8 buf_len)
 {
 	u8 res;
 	HAL_DATA_TYPE	*pHalData;
-	struct csi_rpt_monitor * csi;
 	
 	pHalData= GET_HAL_DATA(adapter);
-	csi = &(pHalData->csi_rpt_monitor);
 	
 	res = C2H_SND_TXBF_GET_SND_RESULT(buf) ? _TRUE : _FALSE;
 	

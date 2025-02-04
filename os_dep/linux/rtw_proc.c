@@ -4440,6 +4440,17 @@ static int proc_get_best_chan(struct seq_file *m, void *v)
 	return 0;
 }
 
+static int proc_get_acs_current_channel(struct seq_file *m, void *v)
+{
+	struct net_device *dev = m->private;
+	_adapter *adapter = (_adapter *)rtw_netdev_priv(dev);
+	if (IS_ACS_ENABLE(adapter))
+		rtw_acs_current_info_dump(m, adapter);
+	else
+		_RTW_PRINT_SEL(m,"ACS disabled\n");
+	return 0;
+}
+
 static ssize_t proc_set_acs(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data)
 {
 #ifdef CONFIG_RTW_ACS_DBG
@@ -6134,6 +6145,7 @@ static ssize_t proc_set_single_tone(struct file *file, const char __user *buffer
 	return count;
 }
 
+#ifdef CONFIG_BEAMFORMING_MONITOR
 static int proc_get_bf_monitor_conf(struct seq_file *m, void *v)
 {
 	struct net_device *dev = m->private;
@@ -6300,7 +6312,7 @@ static ssize_t proc_set_bf_monitor_en(struct file *file, const char __user *buff
         RTW_INFO("bf_monitor_enable, %hhu \n", en);
 	return count;
 }
-
+#endif
 
 /*
 * rtw_adapter_proc:
@@ -6628,6 +6640,7 @@ const struct rtw_proc_hdl adapter_proc_hdls[] = {
 
 #ifdef CONFIG_RTW_ACS
 	RTW_PROC_HDL_SSEQ("acs", proc_get_best_chan, proc_set_acs),
+	RTW_PROC_HDL_SSEQ("acs_current", proc_get_acs_current_channel, NULL),
 	RTW_PROC_HDL_SSEQ("chan_info", proc_get_chan_info, NULL),
 #endif
 
