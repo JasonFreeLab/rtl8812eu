@@ -1755,155 +1755,6 @@ static ssize_t proc_set_edcca_threshold_jaguar3_override(struct file *file, cons
 	return count;
 }
 
-static int proc_get_slottime_override(struct seq_file *m, void *v)
-{
-	struct net_device *dev = m->private;
-	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
-	struct registry_priv	*pregpriv = &padapter->registrypriv;
-	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
-	struct mlme_ext_info *pmlmeinfo = &(pmlmeext->mlmext_info);
-
-	RTW_PRINT_SEL(m, "Slot Time Override\n");
-	RTW_PRINT_SEL(m, "Github: libc0607/rtl88x2eu-20230815\n");
-	RTW_PRINT_SEL(m, "\n");
-	RTW_PRINT_SEL(m, "See DOI: 10.1109/TMC.2010.27 for why we need tuning this.\n");
-	RTW_PRINT_SEL(m, "\n");
-	RTW_PRINT_SEL(m, "Usage: echo \"<en> <slottime>\" > slottime_override\n");
-	RTW_PRINT_SEL(m, "en:			0-disable, 1-enable\n");
-	RTW_PRINT_SEL(m, "slottime_override:	us\n");
-	RTW_PRINT_SEL(m, "\n");
-	RTW_PRINT_SEL(m, "e.g.  \n");
-	RTW_PRINT_SEL(m, "\techo \"1 5\" > slottime_override\n");
-	RTW_PRINT_SEL(m, "\techo \"0 <any_number>\" > slottime_override\n");
-	RTW_PRINT_SEL(m, "\n");
-	RTW_PRINT_SEL(m, "Disclaimer: There's no guarantee on performance. \n");
-	RTW_PRINT_SEL(m, "This operation may damage your hardware.\n");
-	RTW_PRINT_SEL(m, "You should obey the law, and use it at your own risk.\n");
-	RTW_PRINT_SEL(m, "\n");
-	RTW_PRINT_SEL(m, "Current value: %u %u\n", pmlmeinfo->slottime_override_en, pmlmeinfo->slottime_override);
-	
-	return 0;
-}
-
-static ssize_t proc_set_slottime_override(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data)
-{
-	struct net_device *dev = data;
-	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
-	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
-	struct mlme_ext_info *pmlmeinfo = &(pmlmeext->mlmext_info);
-	char tmp[32];
-	u32 en, slottime;
-
-	if (!padapter)
-		return -EFAULT;
-
-	if (count < 2) {
-		RTW_INFO("slottime_override Argument error. \n");
-		return -EFAULT;
-	}
-
-	if (count > sizeof(tmp)) {
-		rtw_warn_on(1);
-		return -EFAULT;
-	}
-
-	if (buffer && !copy_from_user(tmp, buffer, count)) {
-		int num = sscanf(tmp, "%u %u", &en, &slottime);
-		if (num < 1)
-			return count;
-	}
-	
-	if (slottime < 0 || en < 0 || en > 1) {
-		RTW_INFO("out of range: %d %d\n", en, slottime);
-		return count;
-	}
-	
-	if (en == 0) {
-		slottime = 9; // should be the default value
-	}
-	
-	pmlmeinfo->slottime_override = slottime; 
-	pmlmeinfo->slottime_override_en = en; 
-	//rtw_hal_set_hwreg(padapter, HW_VAR_SLOT_TIME, (u8 *)(&slottime));
-	
-	RTW_INFO("Write to slottime_override: %u, %u\n", en, slottime);
-
-	return count;
-}
-
-static int proc_get_sifs_override(struct seq_file *m, void *v)
-{
-	struct net_device *dev = m->private;
-	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
-	struct registry_priv	*pregpriv = &padapter->registrypriv;
-	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
-	struct mlme_ext_info *pmlmeinfo = &(pmlmeext->mlmext_info);
-	
-	RTW_PRINT_SEL(m, "SIFS Override\n");
-	RTW_PRINT_SEL(m, "Github: libc0607/rtl88x2eu-20230815\n");
-	RTW_PRINT_SEL(m, "\n");
-	RTW_PRINT_SEL(m, "Usage: echo \"<en> <sifs>\" > sifs_override\n");
-	RTW_PRINT_SEL(m, "en: 0-disable, 1-enable\n");
-	RTW_PRINT_SEL(m, "sifs: SIFS time, in us\n");
-	RTW_PRINT_SEL(m, "\n");
-	RTW_PRINT_SEL(m, "e.g.  \n");
-	RTW_PRINT_SEL(m, "\techo \"1 16\" > sifs_override\n");
-	RTW_PRINT_SEL(m, "\techo \"0 <any_number>\" > sifs_override\n");
-	RTW_PRINT_SEL(m, "\n");
-	RTW_PRINT_SEL(m, "Disclaimer: There's no guarantee on performance. \n");
-	RTW_PRINT_SEL(m, "This operation may damage your hardware.\n");
-	RTW_PRINT_SEL(m, "You should obey the law, and use it at your own risk.\n");
-	RTW_PRINT_SEL(m, "\n");
-	RTW_PRINT_SEL(m, "Current value: %u %u\n", pmlmeinfo->sifs_override_en, pmlmeinfo->sifs_override);
-
-	return 0;
-}
-
-static ssize_t proc_set_sifs_override(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data)
-{
-	struct net_device *dev = data;
-	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
-	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
-	struct mlme_ext_info *pmlmeinfo = &(pmlmeext->mlmext_info);
-	char tmp[32];
-	u32 sifs_override, sifs_override_en;
-
-	if (!padapter)
-		return -EFAULT;
-
-	if (count < 2) {
-		RTW_INFO("sifs_override Argument error. \n");
-		return -EFAULT;
-	}
-
-	if (count > sizeof(tmp)) {
-		rtw_warn_on(1);
-		return -EFAULT;
-	}
-
-	if (buffer && !copy_from_user(tmp, buffer, count)) {
-		int num = sscanf(tmp, "%u %u", &sifs_override_en, &sifs_override);
-		if (num < 1)
-			return count;
-	}
-	
-	if (sifs_override < 0 || sifs_override_en < 0 || sifs_override_en > 1) {
-		RTW_INFO("out of range: %u %u\n", sifs_override_en, sifs_override);
-		return count;
-	}
-	
-	if (sifs_override_en == 0) {
-		sifs_override = 16;
-	}
-	
-	pmlmeinfo->sifs_override = sifs_override; 
-	pmlmeinfo->sifs_override_en = sifs_override_en; 
-	
-	RTW_INFO("Write to sifs_override: %u, %u\n", sifs_override_en, sifs_override);
-
-	return count;
-}
-
 static int proc_get_country_code(struct seq_file *m, void *v)
 {
 	struct net_device *dev = m->private;
@@ -4350,6 +4201,53 @@ ssize_t proc_set_btc_reduce_wl_txpwr(struct file *file, const char __user *buffe
 	return count;
 }
 
+ssize_t proc_set_btc_agc_tbl(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data)
+{
+	struct net_device *dev = data;
+	PADAPTER padapter;
+	HAL_DATA_TYPE *hal_data;
+	u8 tmp[80] = {0};
+	u32 bt_linked = 0;
+	u32 agc_tbl_idx = 0;
+	u32 num;
+
+	padapter = (PADAPTER)rtw_netdev_priv(dev);
+	hal_data = GET_HAL_DATA(padapter);
+
+	if (NULL == buffer) {
+		RTW_INFO(FUNC_ADPT_FMT ": input buffer is NULL!\n",
+			 FUNC_ADPT_ARG(padapter));
+
+		return -EFAULT;
+	}
+
+	if (count < 1) {
+		RTW_INFO(FUNC_ADPT_FMT ": input length is 0!\n",
+			 FUNC_ADPT_ARG(padapter));
+
+		return -EFAULT;
+	}
+
+	num = count;
+	if (num > (sizeof(tmp) - 1))
+		num = (sizeof(tmp) - 1);
+
+	if (copy_from_user(tmp, buffer, num)) {
+		RTW_INFO(FUNC_ADPT_FMT ": copy buffer from user space FAIL!\n",
+			 FUNC_ADPT_ARG(padapter));
+
+		return -EFAULT;
+	}
+
+	num = sscanf(tmp, "%d %d", &bt_linked, &agc_tbl_idx);
+
+	/* currently only 8822E can support this operation */
+	if (IS_HARDWARE_TYPE_8822E(padapter) && (hal_data->EEPROMBluetoothCoexist == _TRUE))
+		rtw_btcoex_set_agc_tbl(padapter, bt_linked, agc_tbl_idx);
+
+	return count;
+}
+
 #endif /* CONFIG_BT_COEXIST */
 
 #ifdef CONFIG_MBSSID_CAM
@@ -6145,6 +6043,90 @@ static ssize_t proc_set_single_tone(struct file *file, const char __user *buffer
 	return count;
 }
 
+int proc_get_write_rfreg(struct seq_file *m, void *v)
+{
+	struct net_device *dev = m->private;
+	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
+
+        RTW_PRINT_SEL(m, "RF reg read & write usage:\n");
+        RTW_PRINT_SEL(m, "\n");
+        RTW_PRINT_SEL(m, "Write RF reg: \n");
+        RTW_PRINT_SEL(m, "\techo \"<8'h_addr> <20'h_val>\" > write_rfreg \n");
+        RTW_PRINT_SEL(m, "Read RF reg: \n");
+        RTW_PRINT_SEL(m, "\techo \"<8'h_addr>\" > read_rfreg && cat read_rfreg\n");
+	return 0;
+}
+
+ssize_t proc_set_write_rfreg(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data)
+{
+	struct net_device *dev = data;
+	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
+	char tmp[32];
+	u32 addr, val;
+
+	if (count < 2) {
+		RTW_INFO("%s: argument size is less than 2\n", __FUNCTION__);
+		return -EFAULT;
+	}
+
+	if (count > sizeof(tmp)) {
+		rtw_warn_on(1);
+		return -EFAULT;
+	}
+
+	if (buffer && !copy_from_user(tmp, buffer, count)) {
+		int num = sscanf(tmp, "%x %x", &addr, &val);
+		if (num != 2) {
+			RTW_INFO("%s: invalid parameter!\n", __FUNCTION__);
+			return count;
+		}
+                phy_set_rf_reg(padapter, RF_PATH_A, addr&0xff, val&0xfffff, 0xfffff);
+	}
+	return count;
+}
+
+static u8 proc_get_read_rf_addr = 0x0;
+
+int proc_get_read_rfreg(struct seq_file *m, void *v)
+{
+	struct net_device *dev = m->private;
+	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
+
+	RTW_PRINT_SEL(m, "phy_query_rf_reg(RF_PATH_A, 0x%x)=0x%x\n", 
+	  proc_get_read_rf_addr, 
+	  phy_query_rf_reg(padapter, RF_PATH_A, proc_get_read_rf_addr, 0xfffff)
+	);
+	return 0;
+}
+
+ssize_t proc_set_read_rfreg(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data)
+{
+	char tmp[16];
+	u8 addr;
+
+	if (count < 1) {
+		RTW_INFO("%s: argument size is less than 1\n", __FUNCTION__);
+		return -EFAULT;
+	}
+
+	if (count > sizeof(tmp)) {
+		rtw_warn_on(1);
+		return -EFAULT;
+	}
+
+	if (buffer && !copy_from_user(tmp, buffer, count)) {
+
+		int num = sscanf(tmp, "%hhx", &addr);
+
+		if (num != 1) {
+			RTW_INFO("%s: invalid parameter\n", __FUNCTION__);
+			return count;
+		}
+		proc_get_read_rf_addr = addr;
+	}
+	return count;
+}
+
 #ifdef CONFIG_BEAMFORMING_MONITOR
 static int proc_get_bf_monitor_conf(struct seq_file *m, void *v)
 {
@@ -6322,6 +6304,8 @@ const struct rtw_proc_hdl adapter_proc_hdls[] = {
         RTW_PROC_HDL_SSEQ("thermal_state", proc_get_thermal_state, proc_set_thermal_state),
         RTW_PROC_HDL_SSEQ("dis_cca", proc_get_dis_cca, proc_set_dis_cca),
         RTW_PROC_HDL_SSEQ("single_tone", proc_get_single_tone, proc_set_single_tone),
+        RTW_PROC_HDL_SSEQ("write_rfreg", proc_get_write_rfreg, proc_set_write_rfreg),
+        RTW_PROC_HDL_SSEQ("read_rfreg", proc_get_read_rfreg, proc_set_read_rfreg),
 #ifdef CONFIG_BEAMFORMING_MONITOR
         RTW_PROC_HDL_SSEQ("bf_monitor_conf", proc_get_bf_monitor_conf, proc_set_bf_monitor_conf),
         RTW_PROC_HDL_SSEQ("bf_monitor_trig", proc_get_bf_monitor_trig, proc_set_bf_monitor_trig),
@@ -6479,6 +6463,7 @@ const struct rtw_proc_hdl adapter_proc_hdls[] = {
 	RTW_PROC_HDL_SSEQ("btreg_read", proc_get_btreg_read, proc_set_btreg_read),
 	RTW_PROC_HDL_SSEQ("btreg_write", proc_get_btreg_write, proc_set_btreg_write),
 	RTW_PROC_HDL_SSEQ("btc_reduce_wl_txpwr", proc_get_btc_reduce_wl_txpwr, proc_set_btc_reduce_wl_txpwr),
+	RTW_PROC_HDL_SSEQ("btc_set_agc", NULL, proc_set_btc_agc_tbl),
 #ifdef CONFIG_RF4CE_COEXIST
 	RTW_PROC_HDL_SSEQ("rf4ce_state", proc_get_rf4ce_state, proc_set_rf4ce_state),
 #endif
@@ -6546,7 +6531,13 @@ const struct rtw_proc_hdl adapter_proc_hdls[] = {
 #ifdef CONFIG_WOW_KEEP_ALIVE_PATTERN
 	RTW_PROC_HDL_SSEQ("wow_keep_alive_info", proc_dump_wow_keep_alive_info, NULL),
 #endif /*CONFIG_WOW_KEEP_ALIVE_PATTERN*/
-
+#ifdef CONFIG_MDNS_OFFLOAD
+	RTW_PROC_HDL_SSEQ("wow_mdns_resp", proc_get_wow_mdns_resp, proc_set_wow_mdns_resp),
+	RTW_PROC_HDL_SSEQ("wow_mdns_match_criteria", proc_get_wow_mdns_match_criteria, proc_set_wow_mdns_match_criteria),
+	RTW_PROC_HDL_SSEQ("wow_mdns_passthru_list", proc_get_wow_mdns_passthru_list, proc_set_wow_mdns_passthru_list),
+	RTW_PROC_HDL_SSEQ("wow_mdns_offload_state", proc_get_wow_mdns_offload_state, proc_set_wow_mdns_offload_state),
+	RTW_PROC_HDL_SSEQ("wow_mdns_passthru_behavior", proc_get_wow_mdns_passthru_behavior, proc_set_wow_mdns_passthru_behavior),
+#endif
 #endif
 
 #ifdef CONFIG_GPIO_WAKEUP
@@ -6559,8 +6550,6 @@ const struct rtw_proc_hdl adapter_proc_hdls[] = {
 	RTW_PROC_HDL_SSEQ("chan_plan", proc_get_chan_plan, proc_set_chan_plan),
 	RTW_PROC_HDL_SSEQ("monitor_chan_override", proc_get_monitor_chan_override, proc_set_monitor_chan_override),
 	RTW_PROC_HDL_SSEQ("edcca_threshold_jaguar3_override", proc_get_edcca_threshold_jaguar3_override, proc_set_edcca_threshold_jaguar3_override),
-	RTW_PROC_HDL_SSEQ("slottime_override", proc_get_slottime_override, proc_set_slottime_override),
-	RTW_PROC_HDL_SSEQ("sifs_override", proc_get_sifs_override, proc_set_sifs_override),
 	RTW_PROC_HDL_SSEQ("cap_spt_op_class_ch", proc_get_cap_spt_op_class_ch, proc_set_cap_spt_op_class_ch),
 	RTW_PROC_HDL_SSEQ("reg_spt_op_class_ch", proc_get_reg_spt_op_class_ch, proc_set_reg_spt_op_class_ch),
 	RTW_PROC_HDL_SSEQ("cur_spt_op_class_ch", proc_get_cur_spt_op_class_ch, proc_set_cur_spt_op_class_ch),
@@ -6705,7 +6694,10 @@ const struct rtw_proc_hdl adapter_proc_hdls[] = {
 #endif
 
 	RTW_PROC_HDL_SSEQ("ack_timeout", proc_get_ack_timeout, proc_set_ack_timeout),
-
+        RTW_PROC_HDL_SSEQ("cts2_timeout", proc_get_cts2_timeout, proc_set_cts2_timeout),
+        RTW_PROC_HDL_SSEQ("slot_time", proc_get_slot_time, proc_set_slot_time),
+        RTW_PROC_HDL_SSEQ("edca_params", proc_get_edca_params, proc_set_edca_params),
+        
 	RTW_PROC_HDL_SSEQ("dynamic_agg_enable", proc_get_dynamic_agg_enable, proc_set_dynamic_agg_enable),
 	RTW_PROC_HDL_SSEQ("fw_offload", proc_get_fw_offload, proc_set_fw_offload),
 

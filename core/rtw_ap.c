@@ -1297,7 +1297,7 @@ static void update_ap_info(_adapter *padapter, struct sta_info *psta)
 
 static void rtw_set_hw_wmm_param(_adapter *padapter)
 {
-	u8	AIFS, ECWMin, ECWMax, aSifsTime, slottime;
+	u8	AIFS, ECWMin, ECWMax, aSifsTime;
 	u8	acm_mask;
 	u16	TXOP;
 	u32	acParm, i;
@@ -1316,23 +1316,11 @@ static void rtw_set_hw_wmm_param(_adapter *padapter)
 	else
 #endif /* CONFIG_80211N_HT */
 		aSifsTime = 10;
-		
-	if (pmlmeinfo->sifs_override_en == 1) {
-		aSifsTime = pmlmeinfo->sifs_override;
-		RTW_INFO("rtw_set_hw_wmm_param: sifs_override enabled, %d\n", aSifsTime);
-	}
-	
-	if (pmlmeinfo->slottime_override_en == 0) {
-		slottime = pmlmeinfo->slotTime;
-	} else {
-		slottime = pmlmeinfo->slottime_override;
-		RTW_INFO("rtw_set_hw_wmm_param: slottime_override enabled, %d\n", slottime);
-	}
 
 	if (pmlmeinfo->WMM_enable == 0) {
 		padapter->mlmepriv.acm_mask = 0;
 
-		AIFS = aSifsTime + (2 * slottime);
+		AIFS = aSifsTime + (2 * pmlmeinfo->slotTime);
 
 		if (pmlmeext->cur_wireless_mode & (WIRELESS_11G | WIRELESS_11A)) {
 			ECWMin = 4;
@@ -1368,7 +1356,7 @@ static void rtw_set_hw_wmm_param(_adapter *padapter)
 		/* BK */
 		/* AIFS = AIFSN * slot time + SIFS - r2t phy delay */
 #endif
-		AIFS = (7 * slottime) + aSifsTime;
+		AIFS = (7 * pmlmeinfo->slotTime) + aSifsTime;
 		ECWMin = 4;
 		ECWMax = 10;
 		TXOP = 0;
@@ -1378,7 +1366,7 @@ static void rtw_set_hw_wmm_param(_adapter *padapter)
 		RTW_INFO("WMM(BK): %x\n", acParm);
 
 		/* BE */
-		AIFS = (3 * slottime) + aSifsTime;
+		AIFS = (3 * pmlmeinfo->slotTime) + aSifsTime;
 		ECWMin = 4;
 		ECWMax = 6;
 		TXOP = 0;
@@ -1388,7 +1376,7 @@ static void rtw_set_hw_wmm_param(_adapter *padapter)
 		RTW_INFO("WMM(BE): %x\n", acParm);
 
 		/* VI */
-		AIFS = (1 * slottime) + aSifsTime;
+		AIFS = (1 * pmlmeinfo->slotTime) + aSifsTime;
 		ECWMin = 3;
 		ECWMax = 4;
 		TXOP = 94;
@@ -1398,7 +1386,7 @@ static void rtw_set_hw_wmm_param(_adapter *padapter)
 		RTW_INFO("WMM(VI): %x\n", acParm);
 
 		/* VO */
-		AIFS = (1 * slottime) + aSifsTime;
+		AIFS = (1 * pmlmeinfo->slotTime) + aSifsTime;
 		ECWMin = 2;
 		ECWMax = 3;
 		TXOP = 47;
@@ -1697,6 +1685,9 @@ void start_bss_network(_adapter *padapter, struct createbss_parm *parm)
 	u8 chbw_allow = _TRUE;
 	int i;
 	u8 ifbmp_ch_changed = 0;
+#ifdef CONFIG_MCC_MODE
+	u8 start_mcc_ret = NO_NEED_MCC;
+#endif
 
 	if (parm->req_ch != 0) {
 		/* bypass other setting, go checking ch, bw, offset */
@@ -1826,15 +1817,20 @@ chbw_decision:
 		rtw_hal_set_hwreg(padapter , HW_VAR_DO_IQK , &doiqk);
 	}
 
-	if (set_u_ch)
+	if (set_u_ch
+		#ifdef CONFIG_MCC_MODE
+		|| (MCC_EN(padapter) && chbw_allow == _FALSE)
+		#endif
+	)
 		set_channel_bwmode(padapter, u_ch, u_offset, u_bw);
 
 	doiqk = _FALSE;
 	rtw_hal_set_hwreg(padapter , HW_VAR_DO_IQK , &doiqk);
 
 #ifdef CONFIG_MCC_MODE
+	start_mcc_ret = rtw_hal_set_mcc_setting_start_bss_network(padapter, chbw_allow);
 	/* after set_channel_bwmode for backup IQK */
-	if (rtw_hal_set_mcc_setting_start_bss_network(padapter, chbw_allow) == _FAIL) {
+	if (start_mcc_ret == _FAIL) {
 		/* MCC setting fail, update to buddy's channel */
 		rtw_mi_get_ch_setting_union_no_self(padapter, &u_ch, &u_bw, &u_offset);
 		pnetwork->Configuration.DSConfig = u_ch;
@@ -1855,6 +1851,9 @@ chbw_decision:
 				, padapter->mlmeextpriv.cur_ch_offset
 				, ht_option, 0);
 		}
+	} else if (start_mcc_ret == NO_NEED_MCC) {
+            RTW_INFO(FUNC_ADPT_FMT": NO_NEED_MCC\n"
+		            , FUNC_ADPT_ARG(padapter));
 	}
 #endif
 
@@ -2018,6 +2017,9 @@ int rtw_check_beacon_data(_adapter *padapter, u8 *pbuf,  int len)
 	u8 rf_num = 0;
 	int ret_rm;
 	u8 buf[32];
+#if defined(CONFIG_USB_HCI) && defined(RTW_RX_AGGREGATION)
+	HAL_DATA_TYPE *hal = GET_HAL_DATA(padapter);
+#endif
 	/* SSID */
 	/* Supported rates */
 	/* DS Params */
@@ -2437,6 +2439,14 @@ int rtw_check_beacon_data(_adapter *padapter, u8 *pbuf,  int len)
 				SET_HT_CAP_TXBF_COMP_STEERING_NUM_ANTENNAS(pht_cap, rf_num);
 			}
 #endif /* CONFIG_BEAMFORMING */
+#if defined(CONFIG_USB_HCI) && defined(RTW_RX_AGGREGATION)
+			if (hal->rxagg_mode ==  RX_AGG_USB && pregistrypriv->rx_ampdu_amsdu == 1) {
+				if (pht_cap->cap_info & IEEE80211_HT_CAP_MAX_AMSDU) {
+					pht_cap->cap_info = pht_cap->cap_info & (~IEEE80211_HT_CAP_MAX_AMSDU);
+					RTW_INFO("[HT] AMSDU size is 3839 bytes\n");
+				}
+			}
+#endif
 
 			_rtw_memcpy(&pmlmepriv->htpriv.ht_cap, p + 2, ie_len);
 #ifdef CONFIG_RTW_DEBUG
@@ -3495,7 +3505,14 @@ static u8 update_ecsa_ie(_adapter *padapter, bool *process_ecsa)
 
 static void update_bcn_vendor_spec_ie(_adapter *padapter, u8 *oui)
 {
+#ifdef CONFIG_MCC_MODE
+	if (MCC_EN(padapter)) {
+		if (!rtw_hal_check_mcc_status(padapter, MCC_STATUS_DOING_MCC))
+			RTW_INFO("%s\n", __FUNCTION__);
+	}
+#else
 	RTW_INFO("%s\n", __FUNCTION__);
+#endif
 
 	if (_rtw_memcmp(RTW_WPA_OUI, oui, 4))
 		update_bcn_wpa_ie(padapter);

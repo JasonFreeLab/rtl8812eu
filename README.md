@@ -1,16 +1,16 @@
 # rtl88x2eu-20230815
-Linux Driver for WiFi Adapters that are based on the RTL8812EU and RTL8822EU Chipsets, based on driver ```v5.15.0.1-197```
+Linux Driver for WiFi Adapters that are based on the RTL8812EU and RTL8822EU Chipsets, based on driver ```v5.15.0.1-249```  
+Original driver tar: [rtl88x2EU_rtl88x2CU-VE_WiFi_linux_v5.15.0.1-249-g9245f8bd9.20241218_COEX20240913-390e.tar.gz](https://github.com/user-attachments/files/20632328/rtl88x2EU_rtl88x2CU-VE_WiFi_linux_v5.15.0.1-249-g9245f8bd9.20241218_COEX20240913-390e.tar.gz)  
 
-This branch is mainly focused on FPV. Checkout [commit 690d429](https://github.com/libc0607/rtl88x2eu-20230815/commit/690d429ec272892d5388d744097e3c3cb15dad1b) for the original driver from Realtek.  
-
-PRs welcome.
+This branch is mainly focused on FPV. PRs welcome.
 
 ## Hardware 
 BL-M8812EU2 datasheet: [BL-M8812EU2_datasheet_V1.0.1.1_240511.pdf](https://github.com/user-attachments/files/16627775/BL-M8812EU2_datasheet_V1.0.1.1_240511.pdf)  
 Or any adaptor based on RTL8812EU/RTL8822EU should be ok.  
 
 ## Known Issue
-[Injection instability on 40MHz channels](https://github.com/libc0607/rtl88x2eu-20230815/issues/7) (Maybe HW/FW bug, help wanted)  
+[Injection instability on 40MHz channels](https://github.com/libc0607/rtl88x2eu-20230815/issues/7) (Firmware bug, waiting for Realtek's next driver release)  
+Workaround, needs more test: Set `iw channel 80MHz`, and then use `wfb_tx -B 40`   
 
 ## Installation
 ### Platform Configuration
@@ -24,6 +24,9 @@ Or, for arm64, run:
 sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
 sed -i 's/CONFIG_PLATFORM_ARM64_RPI = n/CONFIG_PLATFORM_ARM64_RPI = y/g' Makefile
 ```
+
+Note: there's a possible error with `arm64`/`aarch64`: see [issue #9](https://github.com/libc0607/rtl88x2eu-20230815/issues/9)  
+
 ### Build / Install with DKMS
 Install DKMS on Debian(-based) system: 
 ```
@@ -109,7 +112,7 @@ You should manually set BW back to 20MHz, set TX power, then set BW back again.
 Use ```iw``` to set channel & NOHT/HT20/HT40/80MHz bandwidth, then set the correct bandwidth in the radiotap header (can be done by using ```-B``` in wfb-ng)   
 
 ### 10MHz BW AP/STA 
-It's currently under testing by a Chinese enthusiast, will update here if he has any progress.  
+It's currently under testing by a Chinese enthusiast, will update here if he has any progress. Update: one said it works well  
 According to the module vendor's ambiguous document and the crab's mysterious driver tar with a "_10MHz" suffix:  
 1. Enable ```CONFIG_NARROWBAND_SUPPORTING``` in ```include/hal_ic_cfg.h``` (in ```#ifdef CONFIG_RTL8822E``` section if using RTL8812EU), then ```#define CONFIG_NB_VALUE RTW_NB_CONFIG_WIDTH_10``` below
 2. Rename ```hal/rtl8822e/hal8822e_fw_10M.*``` into ```hal/rtl8822e/hal8822e_fw.*``` to replace the original firmware
@@ -118,23 +121,6 @@ According to the module vendor's ambiguous document and the crab's mysterious dr
 5. If there are any tools complain about the Wi-Fi regularities when setting up a 10MHz AP,  try setting the channel plan manually by ```echo 0x3E > /proc/net/rtl88x2eu/<wlan>/chan_plan```.
 6. Check the ACK timeout setting below if the range is >\~3km
 7. Check ```/proc/net/rtl88x2eu/<wlan>/rate_ctl``` for manually control of the rate if needed. See [@Vito-Swift's tutorial here](https://github.com/Vito-Swift/rtl8814au-ext/blob/main/doc/how_to_do_unicast_rc.md)  
-
-## Set (Unlocked) Channel in procfs  
-The chip's RF synthesizer can work in a bit wider range than regular 5GHz Wi-Fi.  
-On my board, it's 5080MHz ~ 6165MHz. The frequency range may vary depending on different conditions.  
-
-To set the adaptor to some "irregular" frequency, ```cat /proc/net/rtl88x2eu/<wlan0>/monitor_chan_override``` to see usage.  
-
-I decided to use procfs is that it doesn't need any changes in user-space tools, e.g. iw, hostapd.  
-Of course, you can use this "procfs API" to set regular channels like 149 or 36. Might be useful when developing any Wi-Fi-based broadcast FPV system with frequency hopping and automatic bandwidth.  
-
-I recommend using ```iw``` to set the channel first if the channel is usable. Only use the procfs method for irregular.  
-The channel can only be set to any frequency with a 5MHz step since the channel number was directly written into some register, not some divider of the synthesizer. 
-
-DISCLAIMER:  
-Some chips' synthesizer's PLL may not lock on some frequency. There's no guarantee of its performance. (Actually, TX power and distortion seem worse in these channels as it's not calibrated. But less interference - it's an either-or)   
-Unlocking the frequency may damage your hardware and I'm not gonna pay for it. Use it at your own risk.  
-Please comply with any wireless regulations in your area.  
 
 ## EDCCA
 WARNING: YOU SHOULD NOT USE THIS (unless someone's DJIs next to you f***ed up all channels XD). It's not fair.  
@@ -150,30 +136,29 @@ If there are any, the adaptor will wait until the energy level in the air is low
 Note that there are actually two values, L2H and H2L. The L2H is typically set 8dB higher so it creates a hysteresis.   
 The value you're setting is L2H. The H2L is automatically set 8dB lower.  
 
-### Disable CCA (EXPERIMENTAL)
-```echo "1" > /proc/net/rtl8812eu/<wlan0>/dis_cca```  
-Needs test. 10/20MHz BW only.  
-
-## ACK Timeout 
-Provided by Realtek. Seems tunable from 0\~255 (unit: us).  
-e.g. Set ACK timeout to 100us:  
-```echo 100 > /proc/net/rtl88x2eu/<wlanX>/ack_timeout```  
-
-## 802.11 DCF hacking   
+## 802.11 Performance Tuning 
 Note: I don't know if these things are actually working since no one can get the crab's datasheets.  
-Just did some global searching and replaced every place I've found.  
 
-### SIFS
-EXPERIMENTAL, may not work.  
-```/proc/net/rtl88x2eu/<wlanX>/sifs_override```  
+Read this first: [Modeling and Optimizing IEEE 802.11 DCF for Long-Distance Links](https://ieeexplore.ieee.org/document/5408366)  
+
+### ACK Timeout 
+Provided by Realtek. Seems tunable from 0\~255 (unit: us).  
+``` /proc/net/rtl88x2eu/<wlanX>/ack_timeout``` 
+
+### CTS2Self Timeout 
+Seems tunable from 0\~255 (unit: us).  
+```/proc/net/rtl88x2eu/<wlanX>/cts2_timeout``` 
 
 ### Slot time 
+Seems tunable from 0\~255 (unit: us).  
+```/proc/net/rtl88x2eu/<wlanX>/slot_time```  
+
+### EDCA Params
 EXPERIMENTAL, may not work.  
-```/proc/net/rtl88x2eu/<wlanX>/slottime_override```  
+It sets `AIFS`, `CWmin`, `CWmax`, and `TXOP` for `VI`, `VO`, `BE`, `BK`, respectively.    
+```/proc/net/rtl88x2eu/<wlanX>/edca_params```  
 
-DISCLAIMER: There's no guarantee of its performance.
-
-## ~~Noise Monitor~~ ACS
+## Advanced Channel Scanning
 It reports the channel status. Including ```Quality(%)```,  ```Utilization(%)``` (```WIFI Util(%)```+```Interference Util(%)```), ```Noise DBM```... etc.
 ### Usage
 #### Enable it in Makefile
@@ -204,8 +189,6 @@ Channel status scanned by ```sudo iw wlan0 scan freq 5745 5765 5785 5805 5825 pa
 ```cat /proc/net/rtl88x2eu/wlan0/acs```:
 ```
 ========== ACS (VER-3) ==========
-Best 24G Channel:2
-Best 5G Channel:14
 
 Advanced setting - scan_type:A, ch_ms:0(ms), igi:0x00, bw:0
 BW  20MHz
@@ -238,22 +221,6 @@ In which:
 
 In this example -- the channel ```161``` is filled with effective traffic (```WIFI Util(%) = 93%```), and two adjacent channels ```157``` and ```165``` were interfered by leakage (```Interference Util(%) > 80%```, ```NHM(dBm) = -81dBm```), but did not contain any real payloads (low ```WIFI Util(%)```).  
 Both three channels have low ```Quality(%)``` and ```Availability(%)``` here.  
-
-#### Advanced Settings
-```/proc/net/rtl88x2eu/wlan0/acs``` accepts several arguments. No need to tune these in most scenarios.   
-```
-echo "<acs_state:1-start/0-stop> \
-<scan_type:0-passive/1-active/2-mixed> \
-<scan_ch_time_ms> \
-<igi:(0x)1e~(0x)5f> \
-<BW:0-20M/1-40M/2-80M>\" > /proc/net/rtl88x2eu/wlan0/acs
-```
-
-#### CONFIG_BACKGROUND_NOISE_MONITOR
-Note: The code controlled by ```CONFIG_BACKGROUND_NOISE_MONITOR``` is dedicated to Jaguar(1) series (e.g. 8812au), not for Jaguar3 (8812cu/eu). 
-The code used fix gain (IGI), gated the clock of the baseband & MAC, read ADC data of the I/Q channel via some debug register, calculated the magnitude (can represent the noise floor), and then resumed the clock. So it's doable in any chipset as long as there's an ADC debug register with the definition known, but unfortunately not for 8812eu now.
-
-If you know anything more about it, please tell us in the issue.  
 
 ## Thermometer  
 The chip contains a thermometer for calibrating the RF part dynamically. It can be used to estimate the chip temperature.  
@@ -354,4 +321,3 @@ cat /proc/net/rtl88x2eu/<wlan0>/bf_monitor_trig
 ## Use with OpenIPC  
 The driver has been integrated into the default FPV firmware for SSC30KQ, SSC338Q, and SSC377DE since [this commit](https://github.com/OpenIPC/firmware/commit/64228b686002b2fd8fd2cbf722a1a6cb7aad9650).  
 For other platforms, see the tutorial [here in OpenIPC Wiki](https://github.com/OpenIPC/wiki/blob/master/en/fpv-bl-m8812eu2-wifi-adaptors.md).  
-Or, download pre-built firmware with this driver from [here](https://github.com/libc0607/openipc-firmware).  
